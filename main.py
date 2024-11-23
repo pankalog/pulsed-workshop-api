@@ -6,8 +6,9 @@ app = Flask(__name__)
 
 DATA_FILE = 'database.txt'
 
-def get_new_id():
-    max_id = 0
+
+def read_posts_from_file():
+    posts = []
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             for line in f:
@@ -15,14 +16,32 @@ def get_new_id():
                 if not line:
                     continue
                 fields = line.split('|')
-                if fields:
-                    try:
-                        post_id = int(fields[0])
-                        if post_id > max_id:
-                            max_id = post_id
-                    except ValueError:
-                        continue
+                if len(fields) != 5:
+                    continue  # skip invalid lines
+                post_id, username, title, text, date = fields
+                post = {
+                    'id': post_id,
+                    'username': username,
+                    'title': title,
+                    'text': text,
+                    'date': date
+                }
+                posts.append(post)
+    return posts
+
+
+def get_new_id():
+    posts = read_posts_from_file()
+
+    max_id = -1
+    for post in posts:
+        post_id, post_username, title, text, date = post.values()
+        post_id = int(post_id)
+        if max_id < post_id:
+            max_id = post_id
+
     return max_id + 1
+
 
 @app.route('/', methods=['POST'])
 def add_post():
@@ -42,52 +61,45 @@ def add_post():
 
     # Append to the file
     with open(DATA_FILE, 'a') as f:
-        f.write(new_post+"\n")
+        f.write(new_post)
 
     return f"Post added with id {new_id}", 201
+
 
 @app.route('/posts', methods=['GET'])
 def get_posts():
     username = request.args.get('username')
     id_str = request.args.get('id')
 
-    posts = []
+    posts = read_posts_from_file()
 
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                fields = line.split('|')
-                if len(fields) != 5:
-                    continue  # skip invalid lines
-                post_id, post_username, title, text, date = fields
-                if ((not username or username == post_username) and
-                    (not id_str or id_str == post_id)):
-                    posts.append(line)
+    correct_posts = []
 
-    posts = [post_to_html(post) for post in posts]
+    for post in posts:
+        post_id, post_username, title, text, date = post.values()
+        if(username and username == post_username) or (id_str and int(id_str) == post_id):
+            correct_posts.append(post)
+
+    print(correct_posts)
+
+    # [print(post["id"]) for post in posts]
+
+    correct_posts = [post_to_html(line_from_parsed(post)) for post in correct_posts]
 
     # Return the posts as plain text
-    response_data = '\n'.join(posts)
+    response_data = '\n'.join(correct_posts)
     return Response(response_data, mimetype='text/html')
+
 
 @app.route('/', methods=['GET', 'POST'])
 def get_all_posts():
+    posts_from_file = read_posts_from_file();
+
     posts = []
 
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                fields = line.split('|')
-                if len(fields) != 5:
-                    continue  # skip invalid lines
-                post_id, post_username, title, text, date = fields
-                posts.append(line+"<br>")
+    for post in posts_from_file:
+        post_id, post_username, title, text, date = post.values()
+        posts.append(f"{post_id}|{post_username}|{title}|{text}|{date}<br>")
 
     # Return the posts as plain text
     '\n<br>'.join(posts)
@@ -108,6 +120,8 @@ def get_all_posts():
         <form action="/posts" method="get">
             <label for="id">Post ID:</label><br>
             <input type="text" id="id" name="id"><br>
+            <label for="username">User's username:</label><br>
+            <input type="text" id="username" name="username"><br>
             <input type="submit" value="Get Post">
         </form>
     """
@@ -126,6 +140,7 @@ def post_to_html(post_line):
     :param post_line: A string representing a single post with fields separated by '|'.
     :return: A string containing the HTML representation of the post.
     """
+    print(post_line)
     fields = post_line.strip().split('|')
 
     if len(fields) != 5:
@@ -143,6 +158,12 @@ def post_to_html(post_line):
     </div>
     """
     return html
+
+
+def line_from_parsed(post):
+    post_id, username, title, text, date = post.values();
+    return f"{post_id}|{username}|{title}|{text}|{date}<br>"
+
 
 if __name__ == '__main__':
     app.run(debug=True)
