@@ -77,7 +77,8 @@ def get_posts():
 
     for post in posts:
         post_id, post_username, title, text, date = post.values()
-        if(username and username == post_username) or (id_str and int(id_str) == post_id):
+        if((username and username == post_username) or
+                (id_str and int(id_str) == post_id)):
             correct_posts.append(post)
 
     print(correct_posts)
